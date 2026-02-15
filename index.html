@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Administrace Reklamace</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom timeline styles */
+        .timeline-line {
+            position: absolute;
+            left: 15px;
+            top: 24px;
+            bottom: 0;
+            width: 2px;
+            background-color: #e5e7eb;
+            z-index: 0;
+        }
+        .timeline-item:last-child .timeline-line {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800 font-sans">
+
+    <div class="max-w-3xl mx-auto p-4 md:p-8 bg-white shadow-xl min-h-screen">
+        
+        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Řízení reklamace: HP Notebook Maminka</h1>
+        <p class="text-red-600 font-bold text-lg mb-4">Vyřídit do 15.3.2026!</p>
+        
+        <hr class="border-gray-200 mb-6">
+
+        <button onclick="openModal('modal-step')" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg shadow transition duration-200 w-full md:w-auto">
+            Přidat nový krok
+        </button>
+
+        <hr class="border-gray-200 my-6">
+
+        <h2 class="text-xl font-bold text-gray-700 mb-6">Aktuální stavy:</h2>
+        
+        <div id="timeline-container" class="space-y-0">
+            <p class="text-center text-gray-400">Načítání dat...</p>
+        </div>
+
+    </div>
+
+    <div id="modal-step" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-md p-6 transform transition-all">
+            <h3 class="text-xl font-bold mb-2">Zadat nový krok</h3>
+            <p class="text-gray-500 mb-4 text-sm">Stačí vyplnit tyto údaje:</p>
+            
+            <label class="block mb-2 text-sm font-medium">Název kroku:</label>
+            <input type="text" id="inp-name" class="w-full border p-2 rounded mb-3 focus:ring-2 focus:ring-blue-500 outline-none">
+            
+            <label class="block mb-2 text-sm font-medium">Místo provedení:</label>
+            <input type="text" id="inp-place" class="w-full border p-2 rounded mb-3 focus:ring-2 focus:ring-blue-500 outline-none">
+            
+            <label class="block mb-2 text-sm font-medium">Čas:</label>
+            <input type="datetime-local" id="inp-time" class="w-full border p-2 rounded mb-6 focus:ring-2 focus:ring-blue-500 outline-none">
+            
+            <div class="flex justify-end gap-2">
+                <button onclick="closeModal('modal-step')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded transition">Zrušit</button>
+                <button onclick="saveStep()" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition">Uložit</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-request" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-md p-6">
+            <h3 class="text-xl font-bold mb-2">Zadat požadavek</h3>
+            <p class="text-gray-500 mb-4 text-sm">Zapsat požadavek. Uživatel má možnost volby pouze ANO, nebo NE!</p>
+            
+            <input type="hidden" id="req-id">
+            <textarea id="inp-req-text" rows="3" class="w-full border p-2 rounded mb-6 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Např: Souhlasíte s výměnou disku?"></textarea>
+            
+            <div class="flex justify-end gap-2">
+                <button onclick="closeModal('modal-request')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded transition">Zrušit</button>
+                <button onclick="saveRequest()" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition">Uložit</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-note" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-lg shadow-2xl w-full max-w-md p-6">
+            <h3 class="text-xl font-bold mb-2">Přidání poznámky</h3>
+            <p class="text-gray-500 mb-4 text-sm">Přidat poznámku k dokončenému kroku:</p>
+            
+            <input type="hidden" id="note-id">
+            <textarea id="inp-note-text" rows="3" class="w-full border p-2 rounded mb-6 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Interní poznámka..."></textarea>
+            
+            <div class="flex justify-end gap-2">
+                <button onclick="closeModal('modal-note')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 py-2 px-4 rounded transition">Zrušit</button>
+                <button onclick="saveNote()" class="bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded transition">Uložit</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getDatabase, ref, push, onValue, update } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDBIvRbu5uU79OvRW57HGAIxolXJdNjsaU",
+            authDomain: "reklamace-maminka-hp.firebaseapp.com",
+            databaseURL: "https://reklamace-maminka-hp-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "reklamace-maminka-hp",
+            storageBucket: "reklamace-maminka-hp.firebasestorage.app",
+            messagingSenderId: "37365360489",
+            appId: "1:37365360489:web:19300239ff8c42531afff8"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // --- Render Logic ---
+        const container = document.getElementById('timeline-container');
+
+        onValue(ref(db, 'steps'), (snapshot) => {
+            container.innerHTML = "";
+            const data = snapshot.val();
+            
+            if (!data) {
+                container.innerHTML = '<p class="text-center text-gray-500">Zatím žádné záznamy.</p>';
+                return;
+            }
+
+            // Convert object to array and sort by date descending
+            const stepsArray = Object.entries(data).map(([key, value]) => {
+                return { id: key, ...value };
+            });
+
+            stepsArray.sort((a, b) => new Date(b.datetime) - new Date(a.datetime));
+
+            stepsArray.forEach((step, index) => {
+                const isNewest = index === 0;
+                
+                // Styling constants based on requirements
+                const dotColor = isNewest ? 'bg-red-600' : 'bg-gray-400';
+                const textWeight = isNewest ? 'font-bold text-gray-900' : 'font-normal text-gray-600';
+                const dateObj = new Date(step.datetime);
+                const dateStr = dateObj.toLocaleDateString('cs-CZ');
+                const timeStr = dateObj.toLocaleTimeString('cs-CZ', {hour: '2-digit', minute:'2-digit'});
+
+                // Logic for User Response display
+                let responseHtml = '';
+                if (step.userRequest && step.userResponse) {
+                    const color = step.userResponse === 'ANO' ? 'text-green-600' : 'text-red-600';
+                    responseHtml = `<div class="mt-1 ml-4 text-sm font-bold ${color}">Odpověď uživatele: ${step.userResponse}</div>`;
+                }
+
+                // Logic for existing Notes/Requests display (for admin to see what they wrote)
+                const adminNoteDisplay = step.note ? `<div class="mt-1 ml-4 text-xs text-gray-500 italic">Poznámka: ${step.note}</div>` : '';
+                const adminReqDisplay = step.userRequest ? `<div class="mt-1 ml-4 text-xs text-red-800">Požadavek: ${step.userRequest}</div>` : '';
+
+
+                const itemHtml = `
+                <div class="timeline-item relative pl-8 pb-8">
+                    <div class="timeline-line"></div>
+                    
+                    <div class="absolute left-0 top-1 w-8 h-8 rounded-full ${dotColor} flex items-center justify-center border-4 border-white z-10 shadow-sm"></div>
+                    
+                    <div class="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition">
+                        <div class="flex flex-col md:flex-row md:justify-between md:items-center mb-2">
+                            <h3 class="text-lg ${textWeight}">${step.name}</h3>
+                            <span class="text-sm text-gray-500 bg-gray-100 px-2 py-1 rounded">${dateStr} ${timeStr}</span>
+                        </div>
+                        <p class="text-sm text-gray-600 mb-2">Místo: ${step.place}</p>
+                        
+                        ${adminNoteDisplay}
+                        ${adminReqDisplay}
+                        ${responseHtml}
+
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <button onclick="openRequestModal('${step.id}')" class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white py-1 px-3 rounded transition">Žádat operaci</button>
+                            <button onclick="openNoteModal('${step.id}')" class="text-xs bg-amber-500 hover:bg-amber-600 text-white py-1 px-3 rounded transition">Přidat poznámku</button>
+                        </div>
+                    </div>
+                </div>
+                `;
+                container.innerHTML += itemHtml;
+            });
+        });
+
+        // --- Functions exposed to window for HTML events ---
+
+        window.openModal = (id) => { document.getElementById(id).classList.remove('hidden'); }
+        window.closeModal = (id) => { document.getElementById(id).classList.add('hidden'); }
+
+        window.saveStep = () => {
+            const name = document.getElementById('inp-name').value;
+            const place = document.getElementById('inp-place').value;
+            const time = document.getElementById('inp-time').value;
+
+            if (!name || !place || !time) {
+                alert("Musí být vyplněna všechny pole!");
+                return;
+            }
+
+            push(ref(db, 'steps'), {
+                name: name,
+                place: place,
+                datetime: time,
+                timestamp: new Date(time).getTime() // helper for sorting
+            }).then(() => {
+                closeModal('modal-step');
+                // Clear inputs
+                document.getElementById('inp-name').value = '';
+                document.getElementById('inp-place').value = '';
+                document.getElementById('inp-time').value = '';
+            });
+        }
+
+        window.openRequestModal = (id) => {
+            document.getElementById('req-id').value = id;
+            document.getElementById('inp-req-text').value = ''; // clear previous
+            openModal('modal-request');
+        }
+
+        window.saveRequest = () => {
+            const id = document.getElementById('req-id').value;
+            const text = document.getElementById('inp-req-text').value;
+
+            if(!text) {
+                alert("Pole nesmí zůstat prázdné!");
+                return;
+            }
+
+            update(ref(db, 'steps/' + id), {
+                userRequest: text,
+                userResponse: null // reset response if new request is made
+            }).then(() => {
+                closeModal('modal-request');
+            });
+        }
+
+        window.openNoteModal = (id) => {
+            document.getElementById('note-id').value = id;
+            document.getElementById('inp-note-text').value = '';
+            openModal('modal-note');
+        }
+
+        window.saveNote = () => {
+            const id = document.getElementById('note-id').value;
+            const text = document.getElementById('inp-note-text').value;
+
+            if(!text) {
+                alert("Pole nesmí zůstat prázdné!");
+                return;
+            }
+
+            update(ref(db, 'steps/' + id), {
+                note: text
+            }).then(() => {
+                closeModal('modal-note');
+            });
+        }
+
+    </script>
+</body>
+</html>
